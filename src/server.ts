@@ -7,16 +7,19 @@ wss.on('connection', ws => {
 
   // Broadcast message to all connected clients
   ws.on('message', data => {
-    console.log('received data', data.toString('utf-8'));
+    const stringified = data.toString('utf-8');
+    console.log('received data', stringified);
 
     wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) client.send(data);
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(stringified);
+      }
     });
   });
 
   ws.on('close', () => {
     console.log('connection closed');
-  })
+  });
 });
 
 console.log('ready!');

@@ -1,6 +1,5 @@
 {
   "name": "pianuo-server",
-  "private": true,
   "scripts": {
     "start": "ts-node src/server.ts"
   },

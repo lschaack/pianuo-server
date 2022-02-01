@@ -80,47 +80,66 @@ class MessageTrie {
 // wind up w/:
 // r --> e --> l --> releaseHandler
 //         \-> m --> removeIdHandler
+const forwardToConnectedClients = (client: WebSocket, key: string, value: string) => {
+  const id = clientToId.get(client);
+
+  if (id) {
+    const sharedIdClients = idToClient[id];
+
+    sharedIdClients.forEach(connectedClient => {
+      if (connectedClient !== client && connectedClient.readyState === WebSocket.OPEN) {
+        // TODO: avoid reconstructing message
+        connectedClient.send(`${key}${SEPARATOR}${value}`);
+      }
+    });
+  }
+}
+
+const getInitHandlers = (client: WebSocket): Array<[ string, MessageHandler ]> => [
+  [
+    'setId',
+    id => {
+      if (!idToClient[id]) idToClient[id] = [];
+      idToClient[id].push(client);
+
+      clientToId.set(client, id);
+      console.log(`set client id '${id}'`);
+
+      client.send(`idIsSet${SEPARATOR}${id}`);
+    }
+  ],
+  [
+    'removeId',
+    id => {
+      const clientIndex = idToClient[id]?.findIndex(clientWithId => clientWithId === client);
+      if (clientIndex > -1) idToClient[id].splice(clientIndex, 1);
+
+      clientToId.delete(client);
+      console.log(`removed client id '${id}'`);
+
+      client.send(`idIsRemoved${SEPARATOR}${id}`);
+    }
+  ],
+  [
+    'press',
+    key => forwardToConnectedClients(client, 'press', key)
+  ],
+  [
+    'release',
+    key => forwardToConnectedClients(client, 'release', key)
+  ]
+];
 
 wss.on('connection', ws => {
   console.log('connected to new client');
 
+  const MessageHandler = new MessageTrie(getInitHandlers(ws));
+
   // Broadcast message to all connected clients
-  ws.on('message', data => {
-    const stringified = data.toString('utf-8');
-    console.log('received data', stringified);
-
-    // Add/remove ids as they come in
-    if (stringified.startsWith('setId')) {
-      const id = stringified.split(SEPARATOR)[1];
-
-      if (!idToClient[id]) idToClient[id] = [];
-      idToClient[id].push(ws);
-
-      clientToId.set(ws, id);
-      ws.send(`idIsSet${SEPARATOR}${id}`);
-    } else if (stringified.startsWith('removeId')) {
-      const id = stringified.split(SEPARATOR)[1];
-      const clientIndex = idToClient[id]?.findIndex(client => client === ws);
-      if (clientIndex > -1) idToClient[id].splice(clientIndex, 1);
-
-      clientToId.delete(ws);
-      ws.send(`idIsRemoved${SEPARATOR}${id}`);
-    } else {
-      // Forward all other (press/release) messages to clients with the same id
-      const id = clientToId.get(ws);
-
-      if (id) {
-        const sharedIdClients = idToClient[id];
-
-        sharedIdClients.forEach(client => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(stringified);
-          }
-        });
-      }
-    }
-
-  });
+  ws.on(
+    'message',
+    data => MessageHandler.handleMessage(data.toString('utf-8'))
+  );
 
   ws.on('close', () => {
     console.log('connection closed');

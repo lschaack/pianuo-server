@@ -1,6 +1,6 @@
 import WebSocket, { WebSocketServer } from 'ws';
 
-const SEPARATOR = '|';
+const SEPARATOR = '?';
 
 // Keep track of both for speed in both directions
 // there's probably a more memory-efficient way to do this...
